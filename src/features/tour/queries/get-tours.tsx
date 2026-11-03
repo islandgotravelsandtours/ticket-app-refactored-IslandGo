@@ -30,7 +30,7 @@ export const getTours = async (
     const skip = searchParams.size * searchParams.page;
     const take = searchParams.size;
 
-    const [tours, count] = await prisma.$transaction([
+    const [tours, count] = await Promise.all([
         prisma.tour.findMany({
             where,
             skip,
