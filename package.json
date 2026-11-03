@@ -49,6 +49,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.16.5",
     "@types/big.js": "^6.2.2",
     "@types/node": "^20",
     "@types/react": "^18",
