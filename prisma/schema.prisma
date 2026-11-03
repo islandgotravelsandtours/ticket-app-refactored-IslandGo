@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  avatarUrl    String?
+  fullName     String?
+  role         Role      @default(CUSTOMER)
+  sessions     Session[]
+  bookings     Booking[]
+  payments     Payment[]
+  tours      Tour[]
+  comments     Comment[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Tour {
+  id        String       @id @default(cuid())
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  title     String
+  destination String     @default("")
+  content   String       @db.VarChar(1024)
+  status    TourStatus @default(OPEN)
+  departureDate  String
+  price    Int
+  imageUrl  String?
+  images    String[]     @default([])
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  comments  Comment[]
+  bookings  Booking[]
+
+  @@index([userId])
+}
+
+model Booking {
+  id          String        @id @default(cuid())
+  createdAt   DateTime      @default(now())
+  guests      Int
+  totalAmount Int
+  status      BookingStatus @default(PENDING)
+  paidAt      DateTime?
+  paymentRef  String?
+  tour        Tour          @relation(fields: [tourId], references: [id], onDelete: Restrict)
+  tourId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  payments    Payment[]
+
+  @@index([tourId])
+  @@index([userId])
+}
+
+// One row per Xendit checkout attempt. Every customer payment lands in the
+// single (admin-owned) IslandGo Xendit account; this table is the app-side
+// transaction history / receipt record. Only the webhook (or a server-side
+// re-check against Xendit) may move a row to PAID.
+model Payment {
+  id                String        @id @default(cuid())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  referenceNumber   String        @unique // receipt no., e.g. IG-20261102-A1B2C3
+  amount            Int           // centavos (PHP)
+  currency          String        @default("PHP")
+  status            PaymentStatus @default(PENDING)
+  method            String?       // GCASH, PAYMAYA, QRPH, CREDIT_CARD... (filled once paid)
+  invoiceId         String?       @unique // Xendit invoice id
+  gatewayPaymentId  String?       // Xendit payment id, once paid
+  paidAt            DateTime?
+  failureReason     String?
+  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  bookingId         String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  content   String   @db.VarChar(1024)
+  tour    Tour   @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  tourId  String
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+
+  @@index([tourId])
+  @@index([userId])
+}
+
+enum TourStatus {
+  OPEN
+  FULLY_BOOKED
+  COMPLETED
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum BookingStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
