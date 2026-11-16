@@ -118,4 +118,4 @@ The repo includes a `netlify.toml` that builds with `npm run build` and uses the
 
 ## Author
 
-Built by **Flo** (flosimpledev).
+ by **Flo** (flosimpledev).
