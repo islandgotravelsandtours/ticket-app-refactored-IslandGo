@@ -1,51 +1,121 @@
-# Travels & Tours
+# IslandGo 🏝️
 
-A full-stack tour listing and discussion app. Hosts publish tours (destination, itinerary,
-departure date, price per person, availability status); travelers browse, search, sort,
-paginate and ask questions or leave reviews in the comments.
+A full-stack travel and tours booking platform built for Filipino travelers. Admins publish tours, customers browse, book seats, and pay online through GCash, Maya, QR Ph, or card via Xendit, and every payment is saved as a printable receipt.
 
-Refactored from the Road to Next "TicketBounty" app: **Ticket -> Tour**, **deadline -> departureDate**,
-**bounty -> price**, new **destination** field, and status `OPEN / FULLY_BOOKED / COMPLETED`.
-
-## Stack
-Next.js 15 (App Router), React 19, TypeScript, Prisma 5 + PostgreSQL (Supabase), Lucia auth,
-Tailwind CSS 3 + shadcn/ui, nuqs, TanStack Query, Zod.
+> Started as a refactor of the *Road to Next* "TicketBounty" app: **Ticket → Tour**, **deadline → departureDate**, **bounty → price**, plus a new booking and payment flow.
 
 ## Features
-- Sign up / sign in / sign out (Lucia sessions, argon2 password hashing)
-- Tours: create, edit, delete, change status (owner only)
-- Search by title **or destination**, sort (newest, oldest, price), pagination
-- Comments with infinite scroll, delete own comments
-- Light/dark theme, toasts, breadcrumbs, API routes at `/api/tours`
 
-## Setup
+**For travelers**
+- Browse upcoming tours, search by title or destination, sort by newest, oldest, or price, and paginate
+- Book seats by choosing the number of guests (1 to 20)
+- Pay on Xendit's hosted checkout (GCash, Maya, QR Ph, cards, and any other method enabled in your Xendit dashboard)
+- "My Bookings" and "Payment History" pages, plus a printable receipt for each transaction
+- Ask questions or leave reviews in tour comments (infinite scroll, delete your own)
+- Account profile (with avatar upload) and password change
+
+**For admins**
+- Create, edit, delete, and change the status of tours (`OPEN`, `FULLY_BOOKED`, `COMPLETED`)
+- Upload tour images (JPG, PNG, WebP, up to 5 MB) or paste image links
+- View all bookings and all transactions, with totals
+
+**General**
+- Light and dark theme, toasts, breadcrumbs
+- Role-based navigation (`ADMIN` and `CUSTOMER`)
+- REST routes at `/api/tours` and a Xendit webhook at `/api/xendit/webhook`
+
+## Tech Stack
+
+| Area | Tools |
+| --- | --- |
+| Framework | Next.js 15 (App Router, Turbopack), React 19, TypeScript |
+| Database | PostgreSQL (Supabase) with Prisma 5 |
+| Auth | Lucia sessions, argon2 password hashing |
+| UI | Tailwind CSS 3, shadcn/ui (Radix), lucide-react, sonner |
+| State and data | TanStack Query, nuqs (URL search params), Zod validation |
+| Payments | Xendit Invoice API (hosted checkout) |
+| Storage | Supabase Storage (public `tour-images` bucket) |
+| Hosting | Netlify (`@netlify/plugin-nextjs`) |
+
+## Getting Started
+
+### Prerequisites
+- Node.js 22 (see `.nvmrc`)
+- A PostgreSQL database (Supabase works great)
+- A Xendit account (use `xnd_development_...` keys for testing)
+- A Supabase Storage public bucket named `tour-images`
+
+### Setup
+
 ```bash
-cp .env.example .env        # fill in DATABASE_URL and DIRECT_URL
-npm install
-npx prisma db push          # adds Tour.destination and the new status values
-npm run prisma-seed         # demo users + tours (password: geheimnis)
+git clone <your-repo-url>
+cd islandgo
+cp .env.example .env     # then fill in the values below
+npm install              # also runs `prisma generate`
+npx prisma db push       # create the tables
+npm run prisma-seed      # optional: demo data
 npm run dev
 ```
 
-> If you have an existing database from the ticket version, the enum rename
-> (`IN_PROGRESS/DONE` -> `FULLY_BOOKED/COMPLETED`) and table rename (`Ticket` -> `Tour`)
-> will not carry data over. `prisma db push` will warn you; for a dev DB, accept the reset and reseed.
+Open [http://localhost:3000](http://localhost:3000).
+
+### Environment Variables
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | Pooled Postgres connection (app runtime) |
+| `DIRECT_URL` | Direct or session-mode connection (migrations, `db push`) |
+| `SUPABASE_URL` | Supabase project URL (image uploads) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only, never expose it) |
+| `XENDIT_SECRET_KEY` | Xendit API key with Money-in write permission |
+| `XENDIT_CALLBACK_TOKEN` | Xendit webhook verification token |
+| `APP_URL` | Public base URL of the app (used for payment redirects) |
+| `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Admin account details |
+
+> ⚠️ Never commit `.env`. It's already covered by `.gitignore`.
 
 ## Payments (Xendit)
-All customer payments are collected by **one IslandGo Xendit account** (the admin's). Customers pay on
-Xendit's hosted checkout (GCash, Maya, QR Ph, cards... whatever you enable in the Xendit dashboard); every
-attempt is stored as a `Payment` row = the transaction history + receipt.
 
-1. Add to `.env`: `XENDIT_SECRET_KEY`, `XENDIT_CALLBACK_TOKEN`, `APP_URL` (see `.env.example`).
-2. Xendit Dashboard > Settings > Webhooks: set the **Invoices paid** and **Invoices expired** URLs to
-   `https://<your-domain>/api/xendit/webhook`.
-3. `npx prisma db push` (adds/updates the `Payment` table).
+All payments go to a single IslandGo Xendit account.
 
-Flow: Bookings > **Pay now** -> `startPayment` (amount read from the DB booking) -> Xendit invoice page ->
-webhook -> `settleInvoice` re-fetches the invoice from Xendit and marks `Payment` + `Booking` PAID. The receipt
-page also re-checks Xendit directly if the webhook is late.
-Pages: `/transactions` (customer: own history; admin: all + totals) and `/transactions/[id]` (printable receipt).
+1. Add `XENDIT_SECRET_KEY`, `XENDIT_CALLBACK_TOKEN`, and `APP_URL` to `.env`.
+2. In **Xendit Dashboard → Settings → Webhooks**, set the **Invoices paid** and **Invoices expired** URLs to:
+   `https://<your-domain>/api/xendit/webhook`
+3. Choose which payment methods customers see in **Settings → Payment methods**.
 
-## Structure
-`src/features/tour` (actions, queries, components), `src/features/comment`, `src/features/auth`,
-`src/app/(authenticated)/tours`, `src/app/_navigation`.
+**Flow:** Book a tour → **Pay now** → `startPayment` creates a Xendit invoice (the amount always comes from the database, never the client) → customer pays on Xendit → webhook fires → `settleInvoice` re-checks the invoice with Xendit and marks the `Payment` and `Booking` as `PAID`. The receipt page also re-checks Xendit directly if the webhook is late.
+
+## Project Structure
+
+```
+src/
+├── app/                  # Routes (App Router)
+│   ├── (authenticated)/  # tours, bookings, transactions, account
+│   ├── api/              # /api/tours, /api/xendit/webhook
+│   ├── sign-in, sign-up, password-forgot
+│   └── _navigation/      # header, sidebar, account menu
+├── features/             # Feature modules (actions, queries, components)
+│   ├── tour/  booking/  payment/  comment/  auth/  account/
+├── components/           # Shared components + shadcn/ui
+├── lib/                  # prisma, lucia, xendit, image upload helpers
+└── paths.ts              # Central route helpers
+```
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server (Turbopack) |
+| `npm run build` | Production build |
+| `npm start` | Run the production build |
+| `npm run lint` / `lint-fix` | ESLint |
+| `npm run type` | TypeScript type check |
+| `npm run prisma-seed` | Seed demo data |
+
+## Deployment (Netlify)
+
+The repo includes a `netlify.toml` that builds with `npm run build` and uses the Next.js plugin. Add all the environment variables above in **Site settings → Environment variables**, set `APP_URL` to your live domain, and point the Xendit webhooks to it.
+
+## Author
+
+Built by **Flo** (flosimpledev).
